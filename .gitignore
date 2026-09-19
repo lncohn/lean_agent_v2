@@ -1,0 +1,6 @@
+.venv/
+lean_env/.lake/
+lean_env/LeanEnv/*_*.lean
+projects/*/runs/
+__pycache__/
+lean_env/

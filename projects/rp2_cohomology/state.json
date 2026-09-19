@@ -1,0 +1,568 @@
+{
+ "spec": {
+  "name": "rp2_cohomology",
+  "goal": "Compute the simplicial cohomology of the real projective plane RP^2 from an explicit finite triangulation, fully formally in Lean 4 + Mathlib.\n\nRequired final theorems (the last nodes of the plan), for the cochain complex C^0 -> C^1 -> C^2 of the triangulation:\n  1. Over ℤ:  H^0 ≅ ℤ,  H^1 = 0,  H^2 ≅ ZMod 2.\n  2. Over ZMod 2:  H^0 ≅ ZMod 2,  H^1 ≅ ZMod 2,  H^2 ≅ ZMod 2.\nEach H^k must be defined as an honest quotient (kernel of the coboundary modulo the image of the previous coboundary) or an equivalent concrete description proven equal to it, and the isomorphisms must be stated as `Nonempty (H^k ≃+ ℤ)`, `Nonempty (H^k ≃+ ZMod 2)`, or `Subsingleton H^k` (for the zero group), as additive group isomorphisms.",
+  "guidance": "Use the standard 6-vertex triangulation of RP^2 (the hemi-icosahedron): vertices Fin 6, 15 edges (every pair of vertices), 10 triangles. Represent k-cochains as functions `Fin m → R` (m = 6, 15, 10) and the coboundary maps as explicit integer matrices `Matrix (Fin 15) (Fin 6) ℤ` and `Matrix (Fin 10) (Fin 15) ℤ` given by `!![...]` literals or by explicit `fun i j => ...` with a finite case table, mapped into R via `Matrix.map` or `Int.cast`. Then δ¹ ∘ δ⁰ = 0 is a finite computation (`decide`, or `ext i j; fin_cases i <;> fin_cases j <;> rfl`/`simp`). Cohomology can be defined as `(LinearMap.ker δ¹) ⧸ (LinearMap.range δ⁰).comap (LinearMap.ker δ¹).subtype` or via Mathlib's `Module` quotients; alternatively define it as a quotient of AddSubgroups. Prefer statements that can be closed by decide / simp / omega / norm_num / linarith and explicit witnesses; avoid needing Smith normal form. For the ℤ/2-torsion in H^2 over ℤ, exhibit the 2-cochain that is not a coboundary and show 2 times it is one, and show every 2-cochain is congruent mod coboundaries to 0 or that one. State small computational facts (e.g. the value of δ on each basis vector, the rank/kernel facts) as separate lemmas so each is a few lines. Use `open Matrix` and `open BigOperators` where helpful. IMPORTANT DESIGN RULE (learned): instance/defeq checking on `ZMod 2` is very slow in Lean (ZMod is defined by recursion), and specializing quotient constructions directly at R = ℤ or R = ZMod 2 causes `failed to synthesize instance` / heartbeat timeouts. So: prove every structural lemma (isomorphisms of H^k, quotient descriptions) GENERICALLY over `(R : Type) [CommRing R]` taking the concrete facts (witness cochain, surjectivity/injectivity-mod-image facts) as hypotheses, and make the final ℤ / ZMod 2 theorems one-line specializations, exactly as H0_equiv_R -> H0_int / H0_zmod2 did. Concrete computational facts (that a specific cochain is a cocycle, that c • u ∈ range ↔ 2 ∣ c, etc.) may be stated at the specific ring, but should avoid quotient types entirely.",
+  "max_nodes": 30,
+  "attempts_per_lemma": 12,
+  "max_replans": 3
+ },
+ "spent_usd": 50.24949999999999,
+ "replans": 2,
+ "nodes": [
+  {
+   "id": "opens",
+   "kind": "def",
+   "informal": "Open namespaces for matrices and big operators.",
+   "code": "open Matrix BigOperators",
+   "depends_on": [],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "d0",
+   "kind": "def",
+   "informal": "Coboundary matrix δ⁰.",
+   "code": "def edgePair : Fin 15 → Fin 6 × Fin 6 := ![(0,1),(0,2),(0,3),(0,4),(0,5),(1,2),(1,3),(1,4),(1,5),(2,3),(2,4),(2,5),(3,4),(3,5),(4,5)]\n\ndef d0mat : Matrix (Fin 15) (Fin 6) ℤ := fun i j =>\n  (if (edgePair i).2 = j then 1 else 0) - (if (edgePair i).1 = j then 1 else 0)",
+   "depends_on": [
+    "opens"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "triList",
+   "kind": "def",
+   "informal": "The 10 triangles.",
+   "code": "def triList : Fin 10 → Fin 6 × Fin 6 × Fin 6 := ![(0,1,2),(0,1,3),(0,2,4),(0,3,5),(0,4,5),(1,2,5),(1,3,4),(1,4,5),(2,3,4),(2,3,5)]",
+   "depends_on": [
+    "opens"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "edgeIdx",
+   "kind": "def",
+   "informal": "Edge index of a pair.",
+   "code": "def edgeIdx (a b : Fin 6) : Fin 15 :=\n  ![![0,0,1,2,3,4],![0,0,5,6,7,8],![1,5,0,9,10,11],![2,6,9,0,12,13],![3,7,10,12,0,14],![4,8,11,13,14,0]] a b",
+   "depends_on": [
+    "opens"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "d1",
+   "kind": "def",
+   "informal": "Coboundary matrix δ¹.",
+   "code": "def d1mat : Matrix (Fin 10) (Fin 15) ℤ := fun t e =>\n  let v := triList t\n  let i := v.1; let j := v.2.1; let k := v.2.2\n  (if edgeIdx j k = e then 1 else 0) - (if edgeIdx i k = e then 1 else 0) + (if edgeIdx i j = e then 1 else 0)",
+   "depends_on": [
+    "opens",
+    "triList",
+    "edgeIdx"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "d0lin",
+   "kind": "def",
+   "informal": "δ⁰ as a linear map.",
+   "code": "def d0lin (R : Type) [CommRing R] : (Fin 6 → R) →ₗ[R] (Fin 15 → R) :=\n  Matrix.mulVecLin (d0mat.map (Int.cast : ℤ → R))",
+   "depends_on": [
+    "d0"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "d1lin",
+   "kind": "def",
+   "informal": "δ¹ as a linear map.",
+   "code": "def d1lin (R : Type) [CommRing R] : (Fin 15 → R) →ₗ[R] (Fin 10 → R) :=\n  Matrix.mulVecLin (d1mat.map (Int.cast : ℤ → R))",
+   "depends_on": [
+    "d1"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "d1d0_int",
+   "kind": "lemma",
+   "informal": "d1mat * d0mat = 0 over ℤ.",
+   "code": "theorem d1d0_int : d1mat * d0mat = 0",
+   "depends_on": [
+    "d0",
+    "d1"
+   ],
+   "status": "proved",
+   "proof": "ext i j\nsimp only [Matrix.mul_apply, Matrix.zero_apply]\nfin_cases i <;> fin_cases j <;> decide",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/d1d0_int_2026-09-19_12-47-23",
+   "failure_summary": ""
+  },
+  {
+   "id": "d1_comp_d0",
+   "kind": "lemma",
+   "informal": "δ¹ ∘ δ⁰ = 0.",
+   "code": "theorem d1_comp_d0 (R : Type) [CommRing R] : (d1lin R).comp (d0lin R) = 0",
+   "depends_on": [
+    "d0lin",
+    "d1lin",
+    "d1d0_int"
+   ],
+   "status": "proved",
+   "proof": "unfold d1lin d0lin\nrw [← Matrix.mulVecLin_mul]\nhave : d1mat.map (Int.cast : ℤ → R) * d0mat.map (Int.cast : ℤ → R) = 0 := by\n  have e : (Int.cast : ℤ → R) = ⇑(Int.castRingHom R) := rfl\n  rw [e, ← Matrix.map_mul, d1d0_int]\n  ext i j\n  simp\nrw [this]\nsimp",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/d1_comp_d0_2026-09-19_12-48-11",
+   "failure_summary": ""
+  },
+  {
+   "id": "H0",
+   "kind": "def",
+   "informal": "H^0 = ker δ⁰.",
+   "code": "def H0 (R : Type) [CommRing R] : Submodule R (Fin 6 → R) := LinearMap.ker (d0lin R)",
+   "depends_on": [
+    "d0lin"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "H1",
+   "kind": "def",
+   "informal": "H^1 = ker δ¹ / im δ⁰.",
+   "code": "abbrev H1 (R : Type) [CommRing R] : Type :=\n  (LinearMap.ker (d1lin R)) ⧸ (LinearMap.range (d0lin R)).comap (LinearMap.ker (d1lin R)).subtype",
+   "depends_on": [
+    "d1lin",
+    "d0lin"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "H1inst",
+   "kind": "def",
+   "informal": "AddCommGroup on H1.",
+   "code": "noncomputable instance H1inst (R : Type) [CommRing R] : AddCommGroup (H1 R) := inferInstance",
+   "depends_on": [
+    "H1"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "H2",
+   "kind": "def",
+   "informal": "H^2 = C^2 / im δ¹.",
+   "code": "abbrev H2 (R : Type) [CommRing R] : Type :=\n  (Fin 10 → R) ⧸ (LinearMap.range (d1lin R))",
+   "depends_on": [
+    "d1lin"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "H2inst",
+   "kind": "def",
+   "informal": "AddCommGroup on H2.",
+   "code": "noncomputable instance H2inst (R : Type) [CommRing R] : AddCommGroup (H2 R) := inferInstance",
+   "depends_on": [
+    "H2"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "H0_eq_constants",
+   "kind": "lemma",
+   "informal": "ker δ⁰ = constants.",
+   "code": "theorem H0_mem_iff (R : Type) [CommRing R] (f : Fin 6 → R) :\n    f ∈ H0 R ↔ ∀ i, f i = f 0",
+   "depends_on": [
+    "H0",
+    "d0",
+    "d0lin"
+   ],
+   "status": "proved",
+   "proof": "unfold H0 d0lin\nrw [LinearMap.mem_ker, Matrix.mulVecLin_apply, funext_iff]\nconstructor\n· intro h i\n  fin_cases i\n  · rfl\n  · show f 1 = f 0\n    have := h 0; simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ, Fin.sum_univ_zero, Pi.zero_apply] at this; push_cast at this; linear_combination this\n  · show f 2 = f 0\n    have := h 1; simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ, Fin.sum_univ_zero, Pi.zero_apply] at this; push_cast at this; linear_combination this\n  · show f 3 = f 0\n    have := h 2; simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ, Fin.sum_univ_zero, Pi.zero_apply] at this; push_cast at this; linear_combination this\n  · show f 4 = f 0\n    have := h 3; simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ, Fin.sum_univ_zero, Pi.zero_apply] at this; push_cast at this; linear_combination this\n  · show f 5 = f 0\n    have := h 4; simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ, Fin.sum_univ_zero, Pi.zero_apply] at this; push_cast at this; linear_combination this\n· intro h x\n  fin_cases x <;>\n  · simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply]\n    simp [Fin.sum_univ_succ, h]",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H0_eq_constants_2026-09-19_12-50-35",
+   "failure_summary": ""
+  },
+  {
+   "id": "H0_equiv_R",
+   "kind": "lemma",
+   "informal": "H^0 ≅ R.",
+   "code": "theorem H0_equiv_R (R : Type) [CommRing R] : Nonempty (H0 R ≃+ R)",
+   "depends_on": [
+    "H0",
+    "H0_eq_constants"
+   ],
+   "status": "proved",
+   "proof": "refine ⟨{\n  toFun := fun f => f.1 0\n  invFun := fun r => ⟨fun _ => r, by rw [H0_mem_iff]; intro i; rfl⟩\n  left_inv := ?_\n  right_inv := ?_\n  map_add' := ?_\n}⟩\n· intro f\n  ext i\n  show (f.1 0 : R) = f.1 i\n  rw [(H0_mem_iff R f.1).mp f.2 i]\n· intro r; rfl\n· intro f g; rfl",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H0_equiv_R_2026-09-19_12-53-15",
+   "failure_summary": ""
+  },
+  {
+   "id": "H0_int",
+   "kind": "lemma",
+   "informal": "Over ℤ: H^0 ≅ ℤ.",
+   "code": "theorem H0_int : Nonempty (H0 ℤ ≃+ ℤ)",
+   "depends_on": [
+    "H0_equiv_R",
+    "H0"
+   ],
+   "status": "proved",
+   "proof": "exact H0_equiv_R ℤ",
+   "aux": "",
+   "attempts": 8,
+   "run_dir": "projects/rp2_cohomology/runs/H0_int_2026-09-19_12-59-48",
+   "failure_summary": ""
+  },
+  {
+   "id": "H0_zmod2",
+   "kind": "lemma",
+   "informal": "Over ZMod 2: H^0 ≅ ZMod 2.",
+   "code": "theorem H0_zmod2 : Nonempty (H0 (ZMod 2) ≃+ ZMod 2)",
+   "depends_on": [
+    "H0_equiv_R",
+    "H0"
+   ],
+   "status": "proved",
+   "proof": "exact H0_equiv_R (ZMod 2)",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H0_zmod2_2026-09-19_13-00-51",
+   "failure_summary": ""
+  },
+  {
+   "id": "ker_d1_int_desc",
+   "kind": "lemma",
+   "informal": "Over ℤ, ker δ¹ = im δ⁰.",
+   "code": "theorem ker_d1_eq_range_d0_int (z : Fin 15 → ℤ) :\n    z ∈ LinearMap.ker (d1lin ℤ) ↔ z ∈ LinearMap.range (d0lin ℤ)",
+   "depends_on": [
+    "d0lin",
+    "d1lin",
+    "d0",
+    "d1"
+   ],
+   "status": "proved",
+   "proof": "constructor\n· intro hz\n  rw [LinearMap.mem_ker] at hz\n  unfold d1lin at hz\n  rw [Matrix.mulVecLin_apply, funext_iff] at hz\n  have simp_eq : ∀ t : Fin 10, (d1mat.map (Int.cast : ℤ → ℤ)).mulVec z t = 0 := hz\n  have e0 := simp_eq 0\n  have e1 := simp_eq 1\n  have e2 := simp_eq 2\n  have e3 := simp_eq 3\n  have e4 := simp_eq 4\n  have e5 := simp_eq 5\n  have e6 := simp_eq 6\n  have e7 := simp_eq 7\n  have e8 := simp_eq 8\n  have e9 := simp_eq 9\n  simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply, Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons, Matrix.cons_val, Fin.isValue] at e0 e1 e2 e3 e4 e5 e6 e7 e8 e9\n  norm_num at e0 e1 e2 e3 e4 e5 e6 e7 e8 e9\n  refine ⟨![0, z 0, z 1, z 2, z 3, z 4], ?_⟩\n  unfold d0lin\n  rw [Matrix.mulVecLin_apply]\n  funext ed\n  simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ, Fin.sum_univ_zero]\n  fin_cases ed <;>\n    simp only [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons, Matrix.cons_val_fin_one, Fin.isValue, Matrix.cons_val, Pi.zero_apply] <;>\n    norm_num <;>\n    linarith\n· rintro ⟨f, rfl⟩\n  rw [LinearMap.mem_ker]\n  have h2 : (d1lin ℤ) ((d0lin ℤ) f) = ((d1lin ℤ).comp (d0lin ℤ)) f := rfl\n  rw [h2, d1_comp_d0 ℤ]\n  rfl",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/ker_d1_int_desc_2026-09-19_13-01-14",
+   "failure_summary": ""
+  },
+  {
+   "id": "H1_int_subsingleton",
+   "kind": "lemma",
+   "informal": "Over ℤ, H^1 = 0.",
+   "code": "theorem H1_int : Subsingleton (H1 ℤ)",
+   "depends_on": [
+    "H1",
+    "H1inst",
+    "d1_comp_d0"
+   ],
+   "status": "proved",
+   "proof": "unfold H1\nrw [Submodule.Quotient.subsingleton_iff]\nrw [Submodule.eq_top_iff']\nrintro ⟨z, hz⟩\nrw [Submodule.mem_comap]\nexact (ker_d1_eq_range_d0_int z).mp hz",
+   "aux": "",
+   "attempts": 2,
+   "run_dir": "projects/rp2_cohomology/runs/H1_int_subsingleton_2026-09-19_13-31-18",
+   "failure_summary": ""
+  },
+  {
+   "id": "ker_d1_zmod2_desc",
+   "kind": "lemma",
+   "informal": "Over ZMod 2, ker δ¹ / im δ⁰ is 1-dimensional with witness w.",
+   "code": "theorem H1_zmod2_witness : ∃ w : Fin 15 → ZMod 2,\n    w ∈ LinearMap.ker (d1lin (ZMod 2)) ∧\n    (∀ z ∈ LinearMap.ker (d1lin (ZMod 2)), ∃ c : ZMod 2,\n      z - c • w ∈ LinearMap.range (d0lin (ZMod 2))) ∧\n    (∀ c : ZMod 2, c • w ∈ LinearMap.range (d0lin (ZMod 2)) → c = 0)",
+   "depends_on": [
+    "d0lin",
+    "d1lin",
+    "d0",
+    "d1"
+   ],
+   "status": "proved",
+   "proof": "refine ⟨![0,0,0,0,0,0,0,1,1,1,0,1,1,0,0], ?_, ?_, ?_⟩\n· rw [LinearMap.mem_ker]\n  unfold d1lin\n  rw [Matrix.mulVecLin_apply]\n  funext t\n  fin_cases t <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.head_cons,\n      Matrix.cons_val, Fin.isValue] <;>\n    decide\n· intro z hz\n  rw [LinearMap.mem_ker] at hz\n  unfold d1lin at hz\n  rw [Matrix.mulVecLin_apply, funext_iff] at hz\n  have E : ∀ t, (d1mat.map (Int.cast : ℤ → ZMod 2)).mulVec z t = 0 := hz\n  have e0 := E 0; have e1 := E 1; have e2 := E 2; have e3 := E 3; have e4 := E 4\n  have e5 := E 5; have e6 := E 6; have e7 := E 7; have e8 := E 8; have e9 := E 9\n  simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n    Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n    Matrix.head_cons, Matrix.cons_val, Fin.isValue] at e0 e1 e2 e3 e4 e5 e6 e7 e8 e9\n  norm_num at e0 e1 e2 e3 e4 e5 e6 e7 e8 e9\n  refine ⟨z 7 + z 0 + z 3, ?_⟩\n  rw [LinearMap.mem_range]\n  refine ⟨![0, z 0, z 1, z 2, z 3, z 4], ?_⟩\n  unfold d0lin\n  rw [Matrix.mulVecLin_apply]\n  funext ed\n  simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ,\n    Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons,\n    Matrix.cons_val, Fin.isValue, Pi.sub_apply, Pi.smul_apply, smul_eq_mul]\n  fin_cases ed <;> push_cast\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) (0 : ZMod 2)\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) (0 : ZMod 2)\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) (0 : ZMod 2)\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) (0 : ZMod 2)\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) (0 : ZMod 2)\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e0\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e1\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) (0 : ZMod 2)\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e7 + e4\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e8 + e6 + e2 + e1\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e2\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e5 + e7 + e4 + e0\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e6 + e1\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e3\n  · linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) e4\n· intro c hc\n  rw [LinearMap.mem_range] at hc\n  obtain ⟨g, hg⟩ := hc\n  unfold d0lin at hg\n  rw [Matrix.mulVecLin_apply, funext_iff] at hg\n  have h0 := hg 0; have h3 := hg 3; have h7 := hg 7\n  simp only [Matrix.mulVec, dotProduct, d0mat, edgePair, Matrix.map_apply, Fin.sum_univ_succ,\n    Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons,\n    Matrix.cons_val, Fin.isValue, Pi.smul_apply, smul_eq_mul] at h0 h3 h7\n  norm_num at h0 h3 h7\n  linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) h7 + h3 + h0",
+   "aux": "",
+   "attempts": 3,
+   "run_dir": "projects/rp2_cohomology/runs/ker_d1_zmod2_desc_2026-09-19_13-17-23",
+   "failure_summary": ""
+  },
+  {
+   "id": "H1_equiv_of_witness",
+   "kind": "lemma",
+   "informal": "Generic: given a cocycle witness w spanning H^1 with no relations, H^1 R ≅ R.",
+   "code": "theorem H1_equiv_of_witness (R : Type) [CommRing R] (w : Fin 15 → R)\n    (hw : w ∈ LinearMap.ker (d1lin R))\n    (hsurj : ∀ z ∈ LinearMap.ker (d1lin R), ∃ c : R, z - c • w ∈ LinearMap.range (d0lin R))\n    (hinj : ∀ c : R, c • w ∈ LinearMap.range (d0lin R) → c = 0) :\n    Nonempty (H1 R ≃+ R)",
+   "depends_on": [
+    "H1",
+    "H1inst",
+    "d0lin",
+    "d1lin",
+    "d1_comp_d0"
+   ],
+   "status": "proved",
+   "proof": "set K := LinearMap.ker (d1lin R) with hK\nset P := (LinearMap.range (d0lin R)).comap K.subtype with hP\nset x : K := ⟨w, hw⟩ with hx\nlet g : R →ₗ[R] (H1 R) := (P.mkQ).comp (LinearMap.toSpanSingleton R K x)\nhave hgc : ∀ c : R, g c = P.mkQ (c • x) := fun c => rfl\nhave hsub : ∀ c : R, (K.subtype) (c • x) = c • w := by\n  intro c\n  rw [map_smul, Submodule.subtype_apply, hx]\nhave hbij : Function.Bijective g := by\n  constructor\n  · rw [← LinearMap.ker_eq_bot, LinearMap.ker_eq_bot']\n    intro c hc\n    rw [hgc, Submodule.mkQ_apply, Submodule.Quotient.mk_eq_zero, hP,\n      Submodule.mem_comap, hsub] at hc\n    exact hinj c hc\n  · intro y\n    obtain ⟨z, rfl⟩ := Submodule.Quotient.mk_surjective P y\n    obtain ⟨c, hc⟩ := hsurj z.1 z.2\n    refine ⟨c, ?_⟩\n    rw [hgc, Submodule.mkQ_apply, Submodule.Quotient.eq, hP,\n      Submodule.mem_comap, map_sub, hsub, Submodule.subtype_apply]\n    have := neg_mem hc\n    simpa [neg_sub] using this\nexact ⟨(AddEquiv.ofBijective g hbij).symm⟩",
+   "aux": "set_option maxHeartbeats 1000000 in",
+   "attempts": 2,
+   "run_dir": "projects/rp2_cohomology/runs/H1_equiv_of_witness_2026-09-19_14-39-20",
+   "failure_summary": ""
+  },
+  {
+   "id": "H1_zmod2",
+   "kind": "lemma",
+   "informal": "Over ZMod 2, H^1 ≅ ZMod 2.",
+   "code": "theorem H1_zmod2 : Nonempty (H1 (ZMod 2) ≃+ ZMod 2)",
+   "depends_on": [
+    "H1",
+    "H1inst",
+    "H1_equiv_of_witness"
+   ],
+   "status": "proved",
+   "proof": "obtain ⟨w, hw, hsurj, hinj⟩ := H1_zmod2_witness\nexact H1_equiv_of_witness (ZMod 2) w hw hsurj hinj",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H1_zmod2_2026-09-19_14-43-33",
+   "failure_summary": ""
+  },
+  {
+   "id": "H2_int_witness",
+   "kind": "lemma",
+   "informal": "Over ℤ, range δ¹ description with Z/2 torsion witness u.",
+   "code": "theorem H2_int_witness : ∃ u : Fin 10 → ℤ,\n    (2 : ℤ) • u ∈ LinearMap.range (d1lin ℤ) ∧\n    u ∉ LinearMap.range (d1lin ℤ) ∧\n    (∀ v : Fin 10 → ℤ, v ∈ LinearMap.range (d1lin ℤ) ∨\n      v - u ∈ LinearMap.range (d1lin ℤ))",
+   "depends_on": [
+    "d1lin",
+    "d1"
+   ],
+   "status": "proved",
+   "proof": "have preim : ∀ (z : Fin 15 → ℤ) (target : Fin 10 → ℤ),\n    d1mat.mulVec z = target → target ∈ LinearMap.range (d1lin ℤ) := by\n  intro z target hz\n  refine ⟨z, ?_⟩\n  unfold d1lin\n  rw [Matrix.mulVecLin_apply]\n  have e : (d1mat.map (Int.cast : ℤ → ℤ)) = d1mat := by ext i j; simp\n  rw [e]; exact hz\nrefine ⟨![1,0,0,0,0,0,0,0,0,0], ?_, ?_, ?_⟩\n· apply preim ![1,-1,0,0,0,0,-1,0,0,0,1,0,1,0,0]\n  funext t\n  fin_cases t <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.smul_apply, smul_eq_mul] <;>\n    decide\n· intro hmem\n  obtain ⟨z, hz⟩ := hmem\n  unfold d1lin at hz\n  rw [Matrix.mulVecLin_apply] at hz\n  have e : (d1mat.map (Int.cast : ℤ → ℤ)) = d1mat := by ext i j; simp\n  rw [e] at hz\n  have hsum : (∑ t : Fin 10, (d1mat *ᵥ z) t) = 1 := by\n    rw [hz]; decide\n  have hlhs : (∑ t : Fin 10, (d1mat *ᵥ z) t)\n      = ∑ e : Fin 15, (∑ t : Fin 10, d1mat t e) * z e := by\n    simp only [Matrix.mulVec, dotProduct]\n    rw [Finset.sum_comm]\n    congr 1; ext e; rw [Finset.sum_mul]\n  have hpar : ∀ e : Fin 15, Even (∑ t : Fin 10, d1mat t e) := by decide\n  have hEven : Even (∑ e : Fin 15, (∑ t : Fin 10, d1mat t e) * z e) := by\n    apply Finset.even_sum\n    intro e _\n    exact (hpar e).mul_right _\n  rw [← hlhs, hsum] at hEven\n  exact (Int.not_even_iff_odd.2 odd_one) hEven\n· intro v\n  set u : Fin 10 → ℤ := ![1,0,0,0,0,0,0,0,0,0] with hu\n  have h2u : (2 : ℤ) • u ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![1,-1,0,0,0,0,-1,0,0,0,1,0,1,0,0]\n    funext t\n    fin_cases t <;>\n      simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n        Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n        Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.smul_apply, smul_eq_mul] <;>\n      decide\n  have hd0 : ((![1,0,0,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd1 : ((![0,1,0,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![0,1,0,0,0,0,1,0,0,0,-1,0,-1,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd2 : ((![0,0,1,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd3 : ((![0,0,0,1,0,0,0,0,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![0,1,1,0,0,0,1,0,0,0,-1,0,-1,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd4 : ((![0,0,0,0,1,0,0,0,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![0,1,0,1,0,0,0,0,0,0,0,0,0,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd5 : ((![0,0,0,0,0,1,0,0,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![-1,1,0,0,0,1,1,0,0,0,-1,0,-1,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd6 : ((![0,0,0,0,0,0,1,0,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![-1,0,0,0,0,0,1,0,0,0,0,0,0,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd7 : ((![0,0,0,0,0,0,0,1,0,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![-1,0,0,0,0,0,1,1,0,0,0,0,0,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd8 : ((![0,0,0,0,0,0,0,0,1,0] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![0,1,0,0,0,0,0,0,0,0,-1,0,0,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have hd9 : ((![0,0,0,0,0,0,0,0,0,1] : Fin 10 → ℤ) - u) ∈ LinearMap.range (d1lin ℤ) := by\n    rw [hu]\n    apply preim ![-1,0,0,0,0,0,1,0,0,1,0,0,-1,0,0]\n    funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\n  have general : ∀ (q c : ℤ),\n      (v 0 + v 1 + v 2 + v 3 + v 4 + v 5 + v 6 + v 7 + v 8 + v 9) = 2 * q + c →\n      v - c • u ∈ LinearMap.range (d1lin ℤ) := by\n    intro q c hsq\n    have hcomb :\n        q • ((2:ℤ) • u) +\n        (v 0 • ((![1,0,0,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 1 • ((![0,1,0,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 2 • ((![0,0,1,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 3 • ((![0,0,0,1,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 4 • ((![0,0,0,0,1,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 5 • ((![0,0,0,0,0,1,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 6 • ((![0,0,0,0,0,0,1,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 7 • ((![0,0,0,0,0,0,0,1,0,0] : Fin 10 → ℤ) - u) +\n        (v 8 • ((![0,0,0,0,0,0,0,0,1,0] : Fin 10 → ℤ) - u) +\n        v 9 • ((![0,0,0,0,0,0,0,0,0,1] : Fin 10 → ℤ) - u))))))))))\n        ∈ LinearMap.range (d1lin ℤ) := by\n      apply add_mem (Submodule.smul_mem _ _ h2u)\n      apply add_mem (Submodule.smul_mem _ _ hd0)\n      apply add_mem (Submodule.smul_mem _ _ hd1)\n      apply add_mem (Submodule.smul_mem _ _ hd2)\n      apply add_mem (Submodule.smul_mem _ _ hd3)\n      apply add_mem (Submodule.smul_mem _ _ hd4)\n      apply add_mem (Submodule.smul_mem _ _ hd5)\n      apply add_mem (Submodule.smul_mem _ _ hd6)\n      apply add_mem (Submodule.smul_mem _ _ hd7)\n      apply add_mem (Submodule.smul_mem _ _ hd8)\n      exact Submodule.smul_mem _ _ hd9\n    have hveq :\n        (q • ((2:ℤ) • u) +\n        (v 0 • ((![1,0,0,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 1 • ((![0,1,0,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 2 • ((![0,0,1,0,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 3 • ((![0,0,0,1,0,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 4 • ((![0,0,0,0,1,0,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 5 • ((![0,0,0,0,0,1,0,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 6 • ((![0,0,0,0,0,0,1,0,0,0] : Fin 10 → ℤ) - u) +\n        (v 7 • ((![0,0,0,0,0,0,0,1,0,0] : Fin 10 → ℤ) - u) +\n        (v 8 • ((![0,0,0,0,0,0,0,0,1,0] : Fin 10 → ℤ) - u) +\n        v 9 • ((![0,0,0,0,0,0,0,0,0,1] : Fin 10 → ℤ) - u))))))))))) = v - c • u := by\n      rw [hu]\n      funext j\n      fin_cases j <;>\n        (simp only [Pi.add_apply, Pi.smul_apply, Pi.sub_apply, smul_eq_mul]\n         norm_num [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons,\n           Matrix.cons_val_fin_one, Matrix.cons_val]\n         try linarith [hsq])\n    rwa [hveq] at hcomb\n  rcases Int.even_or_odd (v 0 + v 1 + v 2 + v 3 + v 4 + v 5 + v 6 + v 7 + v 8 + v 9) with ⟨k, hk⟩ | ⟨k, hk⟩\n  · left\n    have := general k 0 (by omega)\n    simpa using this\n  · right\n    have := general k 1 (by omega)\n    simpa using this",
+   "aux": "set_option maxHeartbeats 1000000 in\nset_option maxRecDepth 4000 in",
+   "attempts": 3,
+   "run_dir": "projects/rp2_cohomology/runs/H2_int_witness_2026-09-19_15-01-02",
+   "failure_summary": ""
+  },
+  {
+   "id": "phi2",
+   "kind": "def",
+   "informal": "A linear functional φ : (Fin 10 → ZMod 2) → ZMod 2 given by the sum of all 10 coordinates (the total-degree / orientation functional), which vanishes exactly on the range of δ¹ over ZMod 2. This is the detector for H^2 over ZMod 2.",
+   "code": "def phi2 : (Fin 10 → ZMod 2) →ₗ[ZMod 2] ZMod 2 := ∑ i : Fin 10, LinearMap.proj i",
+   "depends_on": [
+    "opens"
+   ],
+   "status": "proved",
+   "proof": null,
+   "aux": "",
+   "attempts": 0,
+   "run_dir": null,
+   "failure_summary": ""
+  },
+  {
+   "id": "phi2_apply",
+   "kind": "lemma",
+   "informal": "φ2 evaluated on v equals the sum of all coordinates.",
+   "code": "theorem phi2_apply (v : Fin 10 → ZMod 2) : phi2 v = ∑ i : Fin 10, v i",
+   "depends_on": [
+    "phi2"
+   ],
+   "status": "proved",
+   "proof": "unfold phi2\nrw [LinearMap.sum_apply]\nrfl",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/phi2_apply_2026-09-19_15-32-51",
+   "failure_summary": ""
+  },
+  {
+   "id": "phi2_range_zero",
+   "kind": "lemma",
+   "informal": "φ2 vanishes on the range of δ¹ over ZMod 2 (each triangle-boundary has an even number of edge contributions, but here φ2 counts triangles; the key is φ2 ∘ d1lin = 0). Proved by computing φ2 (d1lin _ x) = 0 for all x, i.e. showing the columns of d1mat each sum to an even number mod 2.",
+   "code": "theorem phi2_range_zero (v : Fin 10 → ZMod 2) (hv : v ∈ LinearMap.range (d1lin (ZMod 2))) : phi2 v = 0",
+   "depends_on": [
+    "phi2",
+    "phi2_apply",
+    "d1lin",
+    "d1"
+   ],
+   "status": "proved",
+   "proof": "rw [phi2_apply]\nobtain ⟨z, hz⟩ := hv\nunfold d1lin at hz\nrw [Matrix.mulVecLin_apply] at hz\nrw [← hz]\nsimp only [Matrix.mulVec, dotProduct]\nrw [Finset.sum_comm]\nhave key : ∀ e : Fin 15, (∑ t : Fin 10, (d1mat.map (Int.cast : ℤ → ZMod 2)) t e * z e) = 0 := by\n  intro e\n  rw [← Finset.sum_mul]\n  have hcol : (∑ t : Fin 10, (d1mat.map (Int.cast : ℤ → ZMod 2)) t e) = 0 := by\n    fin_cases e <;> decide\n  rw [hcol, zero_mul]\nrw [Finset.sum_congr rfl (fun e _ => key e)]\nsimp",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/phi2_range_zero_2026-09-19_15-33-51",
+   "failure_summary": ""
+  },
+  {
+   "id": "phi2_mem_range",
+   "kind": "lemma",
+   "informal": "Conversely, over ZMod 2 any v with φ2 v = 0 lies in the range of δ¹. Proven by exhibiting an explicit preimage: since range has codimension 1 detected by φ2, and rank of d1mat over ZMod 2 is 9. State as: φ2 v = 0 → v ∈ range.",
+   "code": "theorem phi2_mem_range (v : Fin 10 → ZMod 2) (hv : phi2 v = 0) : v ∈ LinearMap.range (d1lin (ZMod 2))",
+   "depends_on": [
+    "phi2",
+    "phi2_apply",
+    "d1lin",
+    "d1"
+   ],
+   "status": "proved",
+   "proof": "have preim : ∀ (z : Fin 15 → ZMod 2) (target : Fin 10 → ZMod 2),\n    (d1mat.map (Int.cast : ℤ → ZMod 2)).mulVec z = target → target ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  intro z target hz\n  refine ⟨z, ?_⟩\n  unfold d1lin\n  rw [Matrix.mulVecLin_apply]\n  exact hz\nhave hd1 : ((![0,1,0,0,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![0,1,0,0,0,0,1,0,0,0,-1,0,-1,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd2 : ((![0,0,1,0,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd3 : ((![0,0,0,1,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![0,1,1,0,0,0,1,0,0,0,-1,0,-1,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd4 : ((![0,0,0,0,1,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![0,1,0,1,0,0,0,0,0,0,0,0,0,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd5 : ((![0,0,0,0,0,1,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![-1,1,0,0,0,1,1,0,0,0,-1,0,-1,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd6 : ((![0,0,0,0,0,0,1,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![-1,0,0,0,0,0,1,0,0,0,0,0,0,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd7 : ((![0,0,0,0,0,0,0,1,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![-1,0,0,0,0,0,1,1,0,0,0,0,0,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd8 : ((![0,0,0,0,0,0,0,0,1,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![0,1,0,0,0,0,0,0,0,0,-1,0,0,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hd9 : ((![0,0,0,0,0,0,0,0,0,1] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply preim ![-1,0,0,0,0,0,1,0,0,1,0,0,-1,0,0]\n  funext j; fin_cases j <;>\n    simp only [Matrix.mulVec, dotProduct, d1mat, triList, edgeIdx, Matrix.map_apply,\n      Fin.sum_univ_succ, Fin.sum_univ_zero, Matrix.cons_val_zero, Matrix.cons_val_one,\n      Matrix.head_cons, Matrix.cons_val, Fin.isValue, Pi.sub_apply] <;> decide\nhave hcomb :\n    (v 1 • ((![0,1,0,0,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 2 • ((![0,0,1,0,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 3 • ((![0,0,0,1,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 4 • ((![0,0,0,0,1,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 5 • ((![0,0,0,0,0,1,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 6 • ((![0,0,0,0,0,0,1,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 7 • ((![0,0,0,0,0,0,0,1,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 8 • ((![0,0,0,0,0,0,0,0,1,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 9 • ((![0,0,0,0,0,0,0,0,0,1] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]))\n    ∈ LinearMap.range (d1lin (ZMod 2)) := by\n  apply add_mem\n  apply add_mem\n  apply add_mem\n  apply add_mem\n  apply add_mem\n  apply add_mem\n  apply add_mem\n  apply add_mem\n  · exact Submodule.smul_mem _ (v 1) hd1\n  · exact Submodule.smul_mem _ (v 2) hd2\n  · exact Submodule.smul_mem _ (v 3) hd3\n  · exact Submodule.smul_mem _ (v 4) hd4\n  · exact Submodule.smul_mem _ (v 5) hd5\n  · exact Submodule.smul_mem _ (v 6) hd6\n  · exact Submodule.smul_mem _ (v 7) hd7\n  · exact Submodule.smul_mem _ (v 8) hd8\n  · exact Submodule.smul_mem _ (v 9) hd9\nhave hv' : v 0 + (v 1 + (v 2 + (v 3 + (v 4 + (v 5 + (v 6 + (v 7 + (v 8 + v 9)))))))) = 0 := by\n  rw [phi2_apply] at hv\n  simpa [Fin.sum_univ_succ] using hv\nhave hveq :\n    (v 1 • ((![0,1,0,0,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 2 • ((![0,0,1,0,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 3 • ((![0,0,0,1,0,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 4 • ((![0,0,0,0,1,0,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 5 • ((![0,0,0,0,0,1,0,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 6 • ((![0,0,0,0,0,0,1,0,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 7 • ((![0,0,0,0,0,0,0,1,0,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 8 • ((![0,0,0,0,0,0,0,0,1,0] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0]) +\n     v 9 • ((![0,0,0,0,0,0,0,0,0,1] : Fin 10 → ZMod 2) - ![1,0,0,0,0,0,0,0,0,0])) = v := by\n  funext j\n  fin_cases j <;>\n    (simp only [Pi.add_apply, Pi.smul_apply, Pi.sub_apply, smul_eq_mul]\n     norm_num [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons,\n       Matrix.cons_val_fin_one, Matrix.cons_val]) <;>\n    linear_combination (norm := (ring_nf; try simp [CharTwo.two_eq_zero]; try ring_nf)) hv'\nrwa [hveq] at hcomb",
+   "aux": "set_option maxHeartbeats 1000000 in",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/phi2_mem_range_2026-09-19_15-35-33",
+   "failure_summary": ""
+  },
+  {
+   "id": "H2_zmod2_witness",
+   "kind": "lemma",
+   "informal": "Over ZMod 2, range δ¹ description with witness u = e0 (first standard basis vector), using φ2 as the detector: u∉range since φ2 u = 1 ≠ 0; every v is in range or v-u in range since φ2 v ∈ {0,1}.",
+   "code": "theorem H2_zmod2_witness : ∃ u : Fin 10 → ZMod 2,\n    u ∉ LinearMap.range (d1lin (ZMod 2)) ∧\n    (∀ v : Fin 10 → ZMod 2, v ∈ LinearMap.range (d1lin (ZMod 2)) ∨\n      v - u ∈ LinearMap.range (d1lin (ZMod 2)))",
+   "depends_on": [
+    "d1lin",
+    "d1",
+    "phi2",
+    "phi2_apply",
+    "phi2_range_zero",
+    "phi2_mem_range"
+   ],
+   "status": "proved",
+   "proof": "refine ⟨![1,0,0,0,0,0,0,0,0,0], ?_, ?_⟩\n· intro h\n  have := phi2_range_zero _ h\n  rw [phi2_apply] at this\n  simp [Fin.sum_univ_succ] at this\n· intro v\n  have hu : phi2 (![1,0,0,0,0,0,0,0,0,0] : Fin 10 → ZMod 2) = 1 := by\n    rw [phi2_apply]; simp [Fin.sum_univ_succ]\n  have hx : ∀ y : ZMod 2, y = 0 ∨ y = 1 := by decide\n  rcases hx (phi2 v) with h0 | h1\n  · left; exact phi2_mem_range v h0\n  · right\n    apply phi2_mem_range\n    rw [map_sub, hu, h1]; exact sub_self 1",
+   "aux": "",
+   "attempts": 2,
+   "run_dir": "projects/rp2_cohomology/runs/H2_zmod2_witness_2026-09-19_15-39-55",
+   "failure_summary": ""
+  },
+  {
+   "id": "two_elt_addequiv_zmod2",
+   "kind": "lemma",
+   "informal": "Generic helper: an additive group A with a nonzero element g such that every element is 0 or g and 2•g = 0 is ≃+ ZMod 2.",
+   "code": "theorem two_elt_addequiv_zmod2 (A : Type) [AddCommGroup A] (g : A)\n    (hg : g ≠ 0) (h2 : (2 : ℤ) • g = 0) (hcov : ∀ x : A, x = 0 ∨ x = g) :\n    Nonempty (A ≃+ ZMod 2)",
+   "depends_on": [],
+   "status": "proved",
+   "proof": "classical\nhave hgg : g + g = 0 := by\n  have : (2 : ℤ) • g = g + g := by rw [two_smul]\n  rw [this] at h2; exact h2\nhave hg0 : (0 : A) ≠ g := fun h => hg h.symm\nhave h10 : (1 : ZMod 2) ≠ 0 := by decide\nhave h110 : (1 : ZMod 2) + 1 = 0 := by decide\nhave hzc : ∀ c : ZMod 2, c = 0 ∨ c = 1 := by decide\nrefine ⟨{\n  toFun := fun x => if x = g then 1 else 0\n  invFun := fun c => if c = 0 then 0 else g\n  left_inv := ?_\n  right_inv := ?_\n  map_add' := ?_\n}⟩\n· intro x\n  rcases hcov x with h | h <;> subst h <;> simp_all\n· intro c\n  rcases hzc c with h | h <;> subst h <;> simp_all\n· intro x y\n  rcases hcov x with hx | hx <;> rcases hcov y with hy | hy <;> subst hx <;> subst hy <;>\n    simp_all [h110]",
+   "aux": "",
+   "attempts": 3,
+   "run_dir": "projects/rp2_cohomology/runs/two_elt_addequiv_zmod2_2026-09-19_15-41-44",
+   "failure_summary": ""
+  },
+  {
+   "id": "H2_classes_of_witness",
+   "kind": "lemma",
+   "informal": "Generic: from a witness u obtain a generator g = ⟦u⟧ of H2 R with g ≠ 0, 2•g = 0, and every element 0 or g.",
+   "code": "theorem H2_classes_of_witness (R : Type) [CommRing R] (u : Fin 10 → R)\n    (h2 : (2 : R) • u ∈ LinearMap.range (d1lin R))\n    (hu : u ∉ LinearMap.range (d1lin R))\n    (hcov : ∀ v : Fin 10 → R, v ∈ LinearMap.range (d1lin R) ∨ v - u ∈ LinearMap.range (d1lin R)) :\n    ∃ g : H2 R, g ≠ 0 ∧ (2 : ℤ) • g = 0 ∧ (∀ x : H2 R, x = 0 ∨ x = g)",
+   "depends_on": [
+    "H2",
+    "H2inst",
+    "d1lin"
+   ],
+   "status": "proved",
+   "proof": "refine ⟨Submodule.Quotient.mk u, ?_, ?_, ?_⟩\n· rw [Ne, Submodule.Quotient.mk_eq_zero]; exact hu\n· have h2u : (2:ℤ) • u = (2:R) • u := by\n    funext i; simp only [Pi.smul_apply, zsmul_eq_mul, smul_eq_mul]; push_cast; ring\n  rw [show ((2:ℤ) • (Submodule.Quotient.mk u : H2 R)) = Submodule.Quotient.mk ((2:ℤ) • u) from ?_]\n  · rw [h2u, Submodule.Quotient.mk_eq_zero]; exact h2\n  · rw [← Submodule.Quotient.mk_smul]\n· intro x\n  obtain ⟨v, rfl⟩ := Submodule.Quotient.mk_surjective _ x\n  rcases hcov v with h | h\n  · left; rw [Submodule.Quotient.mk_eq_zero]; exact h\n  · right; rw [Submodule.Quotient.eq]; exact h",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H2_classes_of_witness_2026-09-19_15-47-42",
+   "failure_summary": ""
+  },
+  {
+   "id": "H2_equiv_of_witness",
+   "kind": "lemma",
+   "informal": "Generic: from the witness u for H2 R, get H2 R ≃+ ZMod 2.",
+   "code": "theorem H2_equiv_of_witness (R : Type) [CommRing R] (u : Fin 10 → R)\n    (h2 : (2 : R) • u ∈ LinearMap.range (d1lin R))\n    (hu : u ∉ LinearMap.range (d1lin R))\n    (hcov : ∀ v : Fin 10 → R, v ∈ LinearMap.range (d1lin R) ∨ v - u ∈ LinearMap.range (d1lin R)) :\n    Nonempty (H2 R ≃+ ZMod 2)",
+   "depends_on": [
+    "H2",
+    "H2inst",
+    "H2_classes_of_witness",
+    "two_elt_addequiv_zmod2"
+   ],
+   "status": "proved",
+   "proof": "obtain ⟨g, hg, h2g, hcov'⟩ := H2_classes_of_witness R u h2 hu hcov\nexact two_elt_addequiv_zmod2 (H2 R) g hg h2g hcov'",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H2_equiv_of_witness_2026-09-19_15-49-17",
+   "failure_summary": ""
+  },
+  {
+   "id": "H2_int",
+   "kind": "lemma",
+   "informal": "Over ℤ, H^2 ≅ ZMod 2.",
+   "code": "theorem H2_int : Nonempty (H2 ℤ ≃+ ZMod 2)",
+   "depends_on": [
+    "H2",
+    "H2inst",
+    "H2_int_witness",
+    "H2_equiv_of_witness"
+   ],
+   "status": "proved",
+   "proof": "obtain ⟨u, h2, hu, hcov⟩ := H2_int_witness\nexact H2_equiv_of_witness ℤ u h2 hu hcov",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H2_int_2026-09-19_15-50-09",
+   "failure_summary": ""
+  },
+  {
+   "id": "H2_zmod2",
+   "kind": "lemma",
+   "informal": "Over ZMod 2, H^2 ≅ ZMod 2. Specialization of H2_equiv_of_witness; the 2•u ∈ range hypothesis is trivial since (2:ZMod 2)•u = 0.",
+   "code": "theorem H2_zmod2 : Nonempty (H2 (ZMod 2) ≃+ ZMod 2)",
+   "depends_on": [
+    "H2",
+    "H2inst",
+    "H2_zmod2_witness",
+    "H2_equiv_of_witness"
+   ],
+   "status": "proved",
+   "proof": "obtain ⟨u, hu, hcov⟩ := H2_zmod2_witness\napply H2_equiv_of_witness (ZMod 2) u ?_ hu hcov\nhave : (2 : ZMod 2) = 0 := by decide\nrw [this, zero_smul]\nexact Submodule.zero_mem _",
+   "aux": "",
+   "attempts": 1,
+   "run_dir": "projects/rp2_cohomology/runs/H2_zmod2_2026-09-19_15-51-00",
+   "failure_summary": ""
+  }
+ ]
+}
